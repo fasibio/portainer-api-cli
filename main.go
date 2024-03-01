@@ -23,6 +23,7 @@ const (
 
 func getEnvName(prefix string, path ...string) string {
 	p := strings.Join(path, "_")
+
 	return fmt.Sprintf("PORTAINER_API_CLI_%s_%s", strings.ToUpper(p), strings.ToUpper(prefix))
 }
 
