@@ -8,7 +8,7 @@ import (
 
 var zapLogger = zap.NewNop().Sugar()
 
-//Initialize make a new Logger by given level
+// Initialize make a new Logger by given level.
 func Initialize(level string) *zap.SugaredLogger {
 
 	cfg := zap.NewProductionConfig()
@@ -27,7 +27,7 @@ func Initialize(level string) *zap.SugaredLogger {
 	return zapLogger
 }
 
-// Get return the current logger
+// Get return the current logger.
 func Get() *zap.SugaredLogger {
 	return zapLogger
 }

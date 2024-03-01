@@ -1,8 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 
@@ -26,9 +27,34 @@ func getEnvName(prefix string) string {
 }
 
 func main() {
+	r := Runner{}
 	app := cli.NewApp()
 	app.Name = "portainer-api-cli"
-	app.Action = run
+	app.Action = r.Run
+	app.Before = r.Before
+	app.Commands = []cli.Command{
+		{
+			Name: "create",
+			Subcommands: cli.Commands{
+				cli.Command{
+					Name:   "config",
+					Action: r.CreateConfig,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:   "name",
+							EnvVar: getEnvName("name"),
+							Usage:  "name of config",
+						},
+						cli.StringFlag{
+							Name:   "content",
+							EnvVar: getEnvName("content"),
+							Usage:  "path to dir or - for STDIN",
+						},
+					},
+				},
+			},
+		},
+	}
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
 			Name:   CliKeyDeployStack,
@@ -78,11 +104,54 @@ func main() {
 }
 
 func getFileContent(path string) (string, error) {
-	dat, err := ioutil.ReadFile(path)
+	dat, err := os.ReadFile(path)
 	return string(dat), err
 }
 
-func run(c *cli.Context) error {
+type Runner struct {
+	api PortainerApi
+}
+
+func (r *Runner) Before(c *cli.Context) error {
+	logger.Initialize("info")
+	r.api = PortainerApi{
+		PortainerUrl: c.String(CliPortainerUrl),
+	}
+	err := r.api.Login(c.String(CliKeyUserName), c.String(CliKeyUserPassword))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Runner) CreateConfig(c *cli.Context) error {
+	contentPath := c.String("content")
+	content := ""
+	if contentPath == "-" {
+		scanner := bufio.NewScanner(os.Stdin)
+		content = ""
+		for scanner.Scan() {
+			content += scanner.Text() + "\r\n"
+		}
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+	} else {
+		c, err := getFileContent(contentPath)
+		if err != nil {
+			return err
+		}
+		content = c
+	}
+	log.Println("ioer", content)
+	res, err := r.api.CreateConfig(c.String("name"), content, "1")
+	if err == nil {
+		logger.Get().Info(res)
+	}
+	return err
+}
+
+func (r *Runner) Run(c *cli.Context) error {
 	logs := logger.Initialize("info")
 	p := PortainerApi{
 		PortainerUrl: c.String(CliPortainerUrl),
@@ -104,10 +173,10 @@ func run(c *cli.Context) error {
 			StackFileContent: composeContent,
 		}, c.String(CliEndPointID))
 		if err == nil {
-			logs.Info("Deploy New Stack Successfull ", feedback)
+			logs.Info("Deploy New Stack Successful ", feedback)
 			return nil
 		}
-		logs.Info("Error Deploy new Stack perhaps it allready exist... try to update", err)
+		logs.Info("Error Deploy new Stack perhaps it already exist... try to update", err)
 		id, err := p.GetStackIDByName(c.String(CliStackName))
 		if err != nil {
 			return err
@@ -120,7 +189,7 @@ func run(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		logs.Info("Update Stack Successfull ", feedback)
+		logs.Info("Update Stack Successful ", feedback)
 		return nil
 	}
 	logs.Info("No Command choosed")

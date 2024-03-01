@@ -2,9 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+
+	"github.com/fasibio/portainer-api-cli/logger"
 )
 
 type PortainerApi struct {
@@ -44,11 +50,16 @@ func (p *PortainerApi) Login(username, password string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(fmt.Sprintf("%s/api/auth", p.PortainerUrl), "application/json", bytes.NewBuffer(requestBody))
+	resp, err := http.NewRequestWithContext(context.Background(), "POST", fmt.Sprintf("%s/api/auth", p.PortainerUrl), bytes.NewBuffer(requestBody))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	resp.Header.Set("Content-Type", "application/json")
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			logger.Get().Error(err)
+		}
+	}()
 	decoder := json.NewDecoder(resp.Body)
 	var body map[string]string
 	err = decoder.Decode(&body)
@@ -59,19 +70,64 @@ func (p *PortainerApi) Login(username, password string) error {
 	return nil
 }
 
+type CreateConfigBody struct {
+	Name string `json:"Name,omitempty"`
+	Data string `json:"Data,omitempty"`
+}
+
+func (p *PortainerApi) CreateConfig(name, content, endpoint string) (string, error) {
+	client := &http.Client{}
+
+	base64Content := base64.RawStdEncoding.EncodeToString([]byte(content))
+	log.Println("dfssfd", base64Content)
+	b, err := json.Marshal(&CreateConfigBody{Name: name, Data: base64Content})
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), "POST", fmt.Sprintf("%s/api/endpoints/%s/docker/configs/create", p.PortainerUrl, endpoint), bytes.NewBuffer(b))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("authorization", fmt.Sprintf("Bearer %s", p.jwt))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err = res.Body.Close(); err != nil {
+			logger.Get().Error(err)
+		}
+	}()
+	resb, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return fmt.Sprintf("%d: %s", res.StatusCode, string(resb)), nil
+
+}
+
 func (p *PortainerApi) DeployNewApp(deployInfo DeployNewStackInformation, endpoint string) (StackDeployFeedback, error) {
 	client := &http.Client{}
 	requestBody, err := json.Marshal(deployInfo)
 	if err != nil {
 		return StackDeployFeedback{}, err
 	}
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/stacks?endpointId=%s&method=string&type=1", p.PortainerUrl, endpoint), bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", fmt.Sprintf("%s/api/stacks?endpointId=%s&method=string&type=1", p.PortainerUrl, endpoint), bytes.NewBuffer(requestBody))
 	if err != nil {
 		return StackDeployFeedback{}, err
 	}
 	req.Header.Set("authorization", fmt.Sprintf("Bearer %s", p.jwt))
 	res, err := client.Do(req)
-	defer res.Body.Close()
+	if err != nil {
+		return StackDeployFeedback{}, err
+	}
+	defer func() {
+		if err = res.Body.Close(); err != nil {
+			logger.Get().Error(err)
+		}
+	}()
 	decoder := json.NewDecoder(res.Body)
 	if res.StatusCode != 200 {
 		var errorMsg PortainerError
@@ -88,7 +144,7 @@ func (p *PortainerApi) DeployNewApp(deployInfo DeployNewStackInformation, endpoi
 
 func (p *PortainerApi) GetStackIDByName(name string) (int64, error) {
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/stacks", p.PortainerUrl), nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/api/stacks", p.PortainerUrl), nil)
 	if err != nil {
 		return -1, err
 	}
@@ -100,7 +156,11 @@ func (p *PortainerApi) GetStackIDByName(name string) (int64, error) {
 	if res.StatusCode != 200 {
 		return -1, fmt.Errorf("Error by request Status: %s", res.Status)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if err = res.Body.Close(); err != nil {
+			logger.Get().Error(err)
+		}
+	}()
 	decoder := json.NewDecoder(res.Body)
 	var result []StackDeployFeedback
 	err = decoder.Decode(&result)
@@ -139,13 +199,20 @@ func (p *PortainerApi) UpdateStack(info UpdateStackInfo, stackid int64, endpoint
 	if err != nil {
 		return StackDeployFeedback{}, err
 	}
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/api/stacks/%d?endpointId=%s&methode=string&type=1", p.PortainerUrl, stackid, endpoint), bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(context.Background(), "PUT", fmt.Sprintf("%s/api/stacks/%d?endpointId=%s&methode=string&type=1", p.PortainerUrl, stackid, endpoint), bytes.NewBuffer(requestBody))
 	if err != nil {
 		return StackDeployFeedback{}, err
 	}
 	req.Header.Set("authorization", fmt.Sprintf("Bearer %s", p.jwt))
 	res, err := client.Do(req)
-	defer res.Body.Close()
+	if err != nil {
+		return StackDeployFeedback{}, err
+	}
+	defer func() {
+		if err = res.Body.Close(); err != nil {
+			logger.Get().Error(err)
+		}
+	}()
 	decoder := json.NewDecoder(res.Body)
 	if res.StatusCode != 200 {
 		var errorMsg PortainerError
