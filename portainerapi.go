@@ -118,16 +118,28 @@ func (t *authedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (p *PortainerApi) RemoveConfig(id string) error {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/endpoints/%s/docker/configs/%s", p.PortainerUrl, p.EndpointId, id), nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, fmt.Sprintf("%s/api/endpoints/%s/docker/configs/%s", p.PortainerUrl, p.EndpointId, id), nil)
 	if err != nil {
 		return err
 	}
-	_, err = p.client.Do(req)
+	resp, err := p.client.Do(req)
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			logger.Get().Error(err)
+		}
+	}()
 	return err
 }
 
 func (p *PortainerApi) ListConfig() (*Configs, error) {
-	resp, err := p.client.Get(fmt.Sprintf("%s/api/endpoints/%s/docker/configs", p.PortainerUrl, p.EndpointId))
+
+	req, err := http.NewRequestWithContext(context.TODO(), http.MethodGet, fmt.Sprintf("%s/api/endpoints/%s/docker/configs", p.PortainerUrl, p.EndpointId), nil)
+
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
