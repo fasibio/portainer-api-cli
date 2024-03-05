@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -22,6 +23,9 @@ const (
 )
 
 func getEnvName(prefix string, path ...string) string {
+	if len(path) == 0 {
+		return fmt.Sprintf("PORTAINER_API_CLI_%s", strings.ToUpper(prefix))
+	}
 	p := strings.Join(path, "_")
 
 	return fmt.Sprintf("PORTAINER_API_CLI_%s_%s", strings.ToUpper(p), strings.ToUpper(prefix))
@@ -70,11 +74,28 @@ func main() {
 						},
 					},
 					{
-						Name:   "ls",
-						Action: r.ConfigList,
+						Name:    "list",
+						Aliases: []string{"ls"},
+						Action:  r.ConfigList,
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "output",
+								Aliases: []string{"o"},
+								EnvVars: []string{getEnvName("output", "config", "ls")},
+								Usage:   "output format of data, h for human readable or json",
+								Value:   "h",
+								Action: func(ctx *cli.Context, s string) error {
+									if s == "h" || s == "json" {
+										return nil
+									}
+									return fmt.Errorf("only h or json are allowed parameter")
+								},
+							},
+						},
 					},
 					{
 						Name:   "create",
+						Usage:  "create a new swarm config",
 						Action: r.ConfigCreate,
 						Flags: []cli.Flag{
 							&cli.StringFlag{
@@ -156,18 +177,28 @@ func (r *Runner) ConfigRemove(c *cli.Context) error {
 }
 
 func (r *Runner) ConfigList(c *cli.Context) error {
+	output := c.String("output")
 	configs, err := r.api.ListConfig()
 	if err != nil {
 		return err
 	}
 
-	tbl := table.New("ID", "Name", "UpdatedAt")
+	switch output {
+	case "h":
+		tbl := table.New("ID", "Name", "UpdatedAt")
 
-	for _, v := range *configs {
-		tbl.AddRow(v.ID, v.Spec.Name, v.UpdatedAt)
+		for _, v := range *configs {
+			tbl.AddRow(v.ID, v.Spec.Name, v.UpdatedAt)
+		}
+		tbl.Print()
+	case "json":
+		res, err := json.Marshal(configs)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s\n", string(res))
 	}
 
-	tbl.Print()
 	return nil
 }
 
