@@ -15,7 +15,7 @@ import (
 const (
 	CliKeyUserName     = "username"
 	CliKeyUserPassword = "password"
-	CliStackName       = "stack"
+	CliStackName       = "name"
 	CliSwarmID         = "swarmid"
 	CliComposePath     = "composepath"
 	CliPortainerUrl    = "portainerurl"
@@ -131,12 +131,12 @@ func main() {
 							},
 							&cli.StringFlag{
 								Name:    CliSwarmID,
-								EnvVars: []string{getEnvName(CliSwarmID)},
+								EnvVars: []string{getEnvName(CliSwarmID, "stack", "deploy")},
 								Usage:   "the id of your swarm",
 							},
 							&cli.StringFlag{
 								Name:    CliComposePath,
-								EnvVars: []string{getEnvName(CliComposePath)},
+								EnvVars: []string{getEnvName(CliComposePath, "stack", "deploy")},
 								Usage:   "path to compose file",
 							},
 						},
